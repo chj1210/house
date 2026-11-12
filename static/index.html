@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台北市購屋評估分析平台 | Taipei Real Estate Intelligence Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body {
+      background-color: #0b1120;
+      color: #e2e8f0;
+      font-family: "Microsoft JhengHei", "PingFang TC", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(51, 65, 85, 0.75);
+      backdrop-filter: blur(10px);
+    }
+    .grade-s {
+      border-left: 4px solid #ef4444;
+    }
+    .grade-drop-s {
+      border-left: 4px solid #f97316;
+    }
+    .grade-a {
+      border-left: 4px solid #eab308;
+    }
+    .grade-b {
+      border-left: 4px solid #3b82f6;
+    }
+    .grade-review {
+      border-left: 4px solid #a855f7;
+    }
+    .grade-excluded {
+      border-left: 4px solid #64748b;
+      opacity: 0.82;
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- 頂部導覽列 -->
+  <header class="border-b border-slate-800 bg-slate-950/90 sticky top-0 z-30 px-6 py-4">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+          北
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-white tracking-wide flex items-center gap-2">
+            台北市購屋評估分析平台
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-normal">
+              591 即時介接 × 實價登錄 AVM × 四道排他風控
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">
+            自動破解車位灌水假低價・多房仲重複刊登歸戶・一票否決排除法拍／凶宅／地上權／海砂危樓
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button
+          onclick="openCustomEvalModal()"
+          class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition shadow flex items-center gap-1.5"
+        >
+          <span>🧮</span> 單筆 591 物件即時試算器
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl w-full mx-auto px-6 py-6 flex-1 space-y-6">
+    <!-- KPI 戰情指標卡 -->
+    <section class="grid grid-cols-2 md:grid-cols-6 gap-4" id="kpi-container">
+      <div class="glass-card rounded-xl p-4">
+        <div class="text-xs text-slate-400">591 原始刊登 / 歸戶實體</div>
+        <div class="text-2xl font-bold text-white mt-1" id="kpi-dedup">-- / --</div>
+        <div class="text-[11px] text-slate-400 mt-1">自動合併多房仲重複刊登</div>
+      </div>
+      <div class="glass-card rounded-xl p-4 border-rose-500/40">
+        <div class="text-xs text-rose-300 font-medium">🔥 S 級 (低於實價 ≥10%)</div>
+        <div class="text-2xl font-bold text-rose-400 mt-1" id="kpi-s">--</div>
+        <div class="text-[11px] text-rose-300/80 mt-1">含降價突破型急售標的</div>
+      </div>
+      <div class="glass-card rounded-xl p-4 border-amber-500/40">
+        <div class="text-xs text-amber-300 font-medium">⭐ A 級 (折價 5%~10%)</div>
+        <div class="text-2xl font-bold text-amber-400 mt-1" id="kpi-a">--</div>
+        <div class="text-[11px] text-amber-300/80 mt-1">議價後極易談入實價 9 折</div>
+      </div>
+      <div class="glass-card rounded-xl p-4 border-blue-500/40">
+        <div class="text-xs text-blue-300 font-medium">📋 B 級 (車位還原/一般)</div>
+        <div class="text-2xl font-bold text-blue-400 mt-1" id="kpi-b">--</div>
+        <div class="text-[11px] text-blue-300/80 mt-1">揭露未拆車位假低價</div>
+      </div>
+      <div class="glass-card rounded-xl p-4 border-purple-500/40">
+        <div class="text-xs text-purple-300 font-medium">⚠️ 異常低價複核 (≤-25%)</div>
+        <div class="text-2xl font-bold text-purple-400 mt-1" id="kpi-review">--</div>
+        <div class="text-[11px] text-purple-300/80 mt-1">防範未公開事故或釣魚件</div>
+      </div>
+      <div class="glass-card rounded-xl p-4 border-slate-600">
+        <div class="text-xs text-slate-300 font-medium">🛡️ 風控一票否決排除</div>
+        <div class="text-2xl font-bold text-slate-300 mt-1" id="kpi-excluded">--</div>
+        <div class="text-[11px] text-slate-400 mt-1">法拍/凶宅/地上權/海砂</div>
+      </div>
+    </section>
+
+    <!-- 篩選控制列 + 地圖與清單雙欄佈局 -->
+    <section class="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">台北市行政區</label>
+          <select id="filter-district" onchange="renderAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white">
+            <option value="ALL">全部行政區 (12區)</option>
+            <option value="大安區">大安區</option>
+            <option value="信義區">信義區</option>
+            <option value="中正區">中正區</option>
+            <option value="松山區">松山區</option>
+            <option value="中山區">中山區</option>
+            <option value="內湖區">內湖區</option>
+            <option value="文山區">文山區</option>
+            <option value="大同區">大同區</option>
+            <option value="士林區">士林區</option>
+            <option value="北投區">北投區</option>
+            <option value="南港區">南港區</option>
+            <option value="萬華區">萬華區</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">優先購買分級</label>
+          <select id="filter-grade" onchange="renderAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white">
+            <option value="ALL">全部等級 (含風控攔截對照)</option>
+            <option value="S_ALL">🔥 僅顯示 S 級與降價突破 (≤-10%)</option>
+            <option value="A">⭐ 僅顯示 A 級重點議價 (-5%~-10%)</option>
+            <option value="B">📋 僅顯示 B 級 (車位灌水拆算案例)</option>
+            <option value="REVIEW">⚠️ 僅顯示異常低價複核 (≤-25%)</option>
+            <option value="EXCLUDED">❌ 僅檢視被風控排除之瑕疵/地上權案</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">總價預算上限</label>
+          <select id="filter-price" onchange="renderAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white">
+            <option value="99999">不限預算</option>
+            <option value="2500">2,500 萬以內</option>
+            <option value="4000">4,000 萬以內</option>
+            <option value="5000">5,000 萬以內</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2 pt-4">
+          <input type="checkbox" id="filter-hide-excluded" onchange="renderAll()" class="w-4 h-4 rounded accent-rose-500" />
+          <label for="filter-hide-excluded" class="text-sm text-slate-300 cursor-pointer">
+            隱藏已排除之法拍／凶宅／地上權物件
+          </label>
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-400" id="lvr-clean-note">
+        實價登錄基準庫已自動剔除親友特殊交易樣本
+      </div>
+    </section>
+
+    <!-- 主內容區：左側物件雷達卡片 (7欄) + 右側台北市實價比對地圖 (5欄) -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-7 space-y-4" id="property-list">
+        <!-- 動態載入物件卡片 -->
+      </div>
+
+      <div class="lg:col-span-5">
+        <div class="glass-card rounded-xl p-4 sticky top-24 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>🗺️</span> 台北市實價折價雷達地圖
+            </h2>
+            <div class="flex items-center gap-2 text-[11px]">
+              <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">● S級 ≤-10%</span>
+              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">● A級</span>
+              <span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300">● 風控排除</span>
+            </div>
+          </div>
+          <div id="map" class="w-full h-[540px] rounded-lg border border-slate-800 z-10"></div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            💡 點擊地圖標記或左側卡片之「一鍵體檢報告」，即可檢視：<strong class="text-slate-200">車位拆算公式展開</strong>、<strong class="text-slate-200">四道排他風險綠燈卡</strong>、<strong class="text-slate-200">對標實價登錄明細表</strong>與<strong class="text-slate-200">全網重複刊登房仲比價表</strong>。
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 一鍵體檢報告 (Property Due Diligence) Modal -->
+  <div id="dd-modal" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="glass-card rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 border border-slate-700 shadow-2xl">
+      <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <div id="modal-badge" class="inline-block text-xs font-bold px-2.5 py-1 rounded-full mb-2"></div>
+          <h3 id="modal-title" class="text-lg font-bold text-white"></h3>
+          <p id="modal-subtitle" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-2xl font-bold px-2">×</button>
+      </div>
+
+      <div id="modal-body" class="space-y-5"></div>
+    </div>
+  </div>
+
+  <!-- 單筆 591 物件即時試算器 Modal -->
+  <div id="custom-modal" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="glass-card rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 border border-slate-700 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white">🧮 單筆 591 物件即時試算器 (驗證車位拆算與排他風控)</h3>
+        <button onclick="closeCustomModal()" class="text-slate-400 hover:text-white text-2xl font-bold px-2">×</button>
+      </div>
+      <p class="text-xs text-slate-400">
+        輸入任意 591 物件條件（可嘗試在描述中加入「事故、祈福屋、地上權、法拍」或調整開價與車位坪數），立即測試引擎判定結果：
+      </p>
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="col-span-2">
+          <label class="block text-slate-400 mb-1">刊登標題</label>
+          <input id="c-title" type="text" value="科技大樓站「敦南觀止」坡平三房急售" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">行政區</label>
+          <select id="c-district" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white">
+            <option value="大安區">大安區</option>
+            <option value="信義區">信義區</option>
+            <option value="內湖區">內湖區</option>
+            <option value="文山區">文山區</option>
+            <option value="中山區">中山區</option>
+            <option value="松山區">松山區</option>
+            <option value="中正區">中正區</option>
+            <option value="大同區">大同區</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">對標社區名稱 (如 敦南觀止 / 民權大湖閱 / 京站花園廣場)</label>
+          <input id="c-community" type="text" value="敦南觀止" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">591 開價總價 (萬元)</label>
+          <input id="c-price" type="number" step="10" value="4350" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">權狀總坪數 (含車位)</label>
+          <input id="c-ping" type="number" step="0.1" value="45.2" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">車位坪數 (0 代表無車位)</label>
+          <input id="c-park-ping" type="number" step="0.5" value="11.5" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">刊登標示車位價 (萬元，填 0 測試自動帶入社區車位實價)</label>
+          <input id="c-park-price" type="number" step="10" value="0" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-slate-400 mb-1">屋況特色描述 (可測試輸入「祈福屋」「地上權」「法拍不點交」測試排他攔截)</label>
+          <textarea id="c-desc" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white">屋主換屋誠意出售，邊間三面採光，近捷運科技大樓站。</textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="runCustomEval()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">
+          立即執行風控與實價對標
+        </button>
+      </div>
+      <div id="custom-eval-result" class="hidden border-t border-slate-800 pt-4 text-xs space-y-2"></div>
+    </div>
+  </div>
+
+  <script>
+    let allData = [];
+    let summaryData = {};
+    let mapInstance = null;
+    let markersLayer = null;
+
+    function initMap() {
+      mapInstance = L.map("map").setView([25.038, 121.548], 12);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      }).addTo(mapInstance);
+      markersLayer = L.layerGroup().addTo(mapInstance);
+    }
+
+    async function loadProperties() {
+      const resp = await fetch("/api/properties?include_excluded=true");
+      const data = await resp.json();
+      allData = data.properties;
+      summaryData = data.summary;
+
+      document.getElementById("kpi-dedup").textContent =
+        `${summaryData.raw_listings_count} 筆 → ${summaryData.total_entities} 戶`;
+      document.getElementById("kpi-s").textContent = `${summaryData.s_count} 戶`;
+      document.getElementById("kpi-a").textContent = `${summaryData.a_count} 戶`;
+      document.getElementById("kpi-b").textContent = `${summaryData.b_count} 戶`;
+      document.getElementById("kpi-review").textContent = `${summaryData.review_count} 戶`;
+      document.getElementById("kpi-excluded").textContent = `${summaryData.excluded_count} 戶`;
+      document.getElementById("lvr-clean-note").textContent =
+        `✓ 已載入有效實價登錄 ${summaryData.clean_lvr_count} 筆（自動剔除親友/特殊交易異常樣本 ${summaryData.abnormal_lvr_removed} 筆）`;
+
+      renderAll();
+    }
+
+    function getGradeStyle(grade) {
+      switch (grade) {
+        case "S":
+          return {
+            card: "grade-s",
+            badge: "bg-rose-500/20 text-rose-300 border border-rose-500/40",
+            color: "#ef4444",
+          };
+        case "DROP_S":
+          return {
+            card: "grade-drop-s",
+            badge: "bg-orange-500/20 text-orange-300 border border-orange-500/40",
+            color: "#f97316",
+          };
+        case "A":
+          return {
+            card: "grade-a",
+            badge: "bg-amber-500/20 text-amber-300 border border-amber-500/40",
+            color: "#eab308",
+          };
+        case "B":
+          return {
+            card: "grade-b",
+            badge: "bg-blue-500/20 text-blue-300 border border-blue-500/40",
+            color: "#3b82f6",
+          };
+        case "REVIEW":
+          return {
+            card: "grade-review",
+            badge: "bg-purple-500/20 text-purple-300 border border-purple-500/40",
+            color: "#a855f7",
+          };
+        default:
+          return {
+            card: "grade-excluded",
+            badge: "bg-slate-700 text-slate-300 border border-slate-600",
+            color: "#64748b",
+          };
+      }
+    }
+
+    function renderAll() {
+      const dist = document.getElementById("filter-district").value;
+      const grade = document.getElementById("filter-grade").value;
+      const maxPrice = parseFloat(document.getElementById("filter-price").value);
+      const hideExcluded = document.getElementById("filter-hide-excluded").checked;
+
+      const filtered = allData.filter((p) => {
+        if (hideExcluded && p.risk_result.is_excluded) return false;
+        if (dist !== "ALL" && p.district !== dist) return false;
+        if (grade !== "ALL") {
+          if (grade === "S_ALL" && p.priority_grade !== "S" && p.priority_grade !== "DROP_S")
+            return false;
+          if (grade !== "S_ALL" && p.priority_grade !== grade) return false;
+        }
+        if (p.lowest_asking_price_wan > maxPrice) return false;
+        return true;
+      });
+
+      const container = document.getElementById("property-list");
+      container.innerHTML = "";
+      markersLayer.clearLayers();
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="glass-card rounded-xl p-8 text-center text-slate-400">無符合篩選條件之物件</div>`;
+        return;
+      }
+
+      filtered.forEach((p) => {
+        const style = getGradeStyle(p.priority_grade);
+        const commTag = p.community_name ? `【${p.community_name}】` : `【${p.building_type}】`;
+        const brokerCount = p.broker_channels.length;
+        const spread = p.highest_asking_price_wan - p.lowest_asking_price_wan;
+        const discountColor =
+          p.discount_rate_pct <= -10
+            ? "text-rose-400"
+            : p.discount_rate_pct <= -5
+            ? "text-amber-400"
+            : "text-slate-300";
+
+        // 風險綠燈或攔截原因
+        let riskHtml = "";
+        if (p.risk_result.is_excluded) {
+          riskHtml = `<div class="mt-2 p-2.5 rounded-lg bg-rose-950/50 border border-rose-800/60 text-xs text-rose-200 space-y-1">
+            ${p.risk_result.exclusion_reasons.map((r) => `<div>⛔ ${r}</div>`).join("")}
+          </div>`;
+        } else {
+          riskHtml = `<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ 非法拍</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ 凶宅庫/黑話未命中</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ 非海砂/輻射列管</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ 正常產權(${p.zoning})</span>
+          </div>`;
+        }
+
+        const warningsHtml =
+          p.risk_result.warning_flags.length > 0
+            ? `<div class="mt-2 p-2 rounded bg-amber-950/40 border border-amber-700/50 text-[11px] text-amber-200 space-y-1">
+                ${p.risk_result.warning_flags.map((w) => `<div>⚠️ ${w}</div>`).join("")}
+               </div>`
+            : "";
+
+        const dupHtml =
+          brokerCount > 1
+            ? `<span class="text-xs text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-2 py-0.5 rounded">
+                🔗 全網 ${brokerCount} 家房仲重複刊登｜最低價管道省 ${spread} 萬
+               </span>`
+            : `<span class="text-xs text-slate-400">單一房仲刊登 (${p.broker_channels[0]?.broker_agency || ""})</span>`;
+
+        const dropHtml =
+          p.price_drop_count > 0
+            ? `<span class="text-xs text-orange-300 bg-orange-500/15 border border-orange-500/30 px-2 py-0.5 rounded">
+                📉 累計降價 ${p.price_drop_count} 次 (-${p.total_price_drop_wan}萬 / -${p.total_price_drop_pct}%)
+               </span>`
+            : "";
+
+        const card = document.createElement("div");
+        card.className = `glass-card rounded-xl p-5 transition hover:border-slate-500 ${style.card}`;
+        card.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${style.badge}">
+                ${p.priority_label}
+              </span>
+              ${dupHtml}
+              ${dropHtml}
+            </div>
+            <span class="text-xs text-slate-400">上架 ${p.days_on_market} 天｜${p.entity_id}</span>
+          </div>
+
+          <h3 class="text-base font-bold text-white leading-snug">
+            ${p.district} ${commTag} ${p.title}
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">
+            📍 ${p.district}${p.village}${p.address_road}｜${p.floor}F/${p.total_floors}F｜屋齡 ${p.age_years} 年｜${p.layout}｜權狀 ${p.total_ping} 坪 (實坪比 ${p.real_indoor_ratio_pct}%)｜近捷運${p.mrt_station}
+          </p>
+
+          <!-- 核心單價對標與車位拆算看板 -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+            <div>
+              <div class="text-[11px] text-slate-400">全網最低開價總價</div>
+              <div class="text-lg font-bold text-white">${p.lowest_asking_price_wan.toLocaleString()} <span class="text-xs font-normal">萬</span></div>
+              <div class="text-[11px] text-slate-400">AVM 估值 ${p.estimated_market_total_wan.toLocaleString()} 萬</div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-400">開價淨單價 (P_ask)</div>
+              <div class="text-lg font-bold text-emerald-300">${p.net_asking_unit_price_wan} <span class="text-xs font-normal">萬/坪</span></div>
+              <div class="text-[11px] text-slate-400">未拆車位: ${p.raw_unit_price_wan} 萬/坪</div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-400">實價基準 (P_bench)</div>
+              <div class="text-lg font-bold text-slate-200">${p.benchmark_unit_price_wan} <span class="text-xs font-normal">萬/坪</span></div>
+              <div class="text-[11px] text-slate-400 truncate" title="${p.benchmark_tier}">${p.benchmark_tier}</div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-400">實價折價率</div>
+              <div class="text-xl font-extrabold ${discountColor}">
+                ${p.discount_rate_pct > 0 ? "+" : ""}${p.discount_rate_pct}%
+              </div>
+              <div class="text-[11px] text-slate-400">
+                ${p.potential_savings_wan >= 0 ? `折讓空間 ${p.potential_savings_wan} 萬` : `溢價 ${Math.abs(p.potential_savings_wan)} 萬`}
+              </div>
+            </div>
+          </div>
+
+          ${riskHtml}
+          ${warningsHtml}
+
+          <div class="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs text-slate-300">
+              🏆 最低價管道：<strong class="text-white">${p.broker_channels[0]?.broker_agency} (${p.broker_channels[0]?.agent_name})</strong>
+            </div>
+            <button
+              onclick="openDueDiligence('${p.entity_id}')"
+              class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-600 transition"
+            >
+              🔍 一鍵體檢報告 & 實價明細 (${p.comparables.length}筆)
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+
+        // 加入地圖標記
+        const marker = L.circleMarker([p.lat, p.lng], {
+          radius: 9,
+          fillColor: style.color,
+          color: "#ffffff",
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.9,
+        }).addTo(markersLayer);
+
+        marker.bindPopup(`
+          <div style="font-size:12px; min-width:210px;">
+            <strong>${p.district} ${commTag}</strong><br/>
+            <span>${p.priority_label}</span><br/>
+            最低開價：<b>${p.lowest_asking_price_wan} 萬</b><br/>
+            拆車位淨單價：<b>${p.net_asking_unit_price_wan} 萬/坪</b><br/>
+            實價基準價：<b>${p.benchmark_unit_price_wan} 萬/坪 (${p.discount_rate_pct}%)</b>
+          </div>
+        `);
+      });
+    }
+
+    async function openDueDiligence(entityId) {
+      const resp = await fetch(`/api/properties/${entityId}`);
+      const p = await resp.json();
+      const style = getGradeStyle(p.priority_grade);
+
+      const modal = document.getElementById("dd-modal");
+      const badge = document.getElementById("modal-badge");
+      badge.className = `inline-block text-xs font-bold px-2.5 py-1 rounded-full mb-2 ${style.badge}`;
+      badge.textContent = p.priority_label;
+
+      document.getElementById("modal-title").textContent =
+        `${p.district} ${p.community_name ? `【${p.community_name}】` : ""} ${p.title}`;
+      document.getElementById("modal-subtitle").textContent =
+        `實體編號：${p.entity_id} ｜ 地址：${p.district}${p.village}${p.address_road} (${p.floor}F/${p.total_floors}F) ｜ 都市計畫分區：${p.zoning}`;
+
+      const checkIcon = (ok) =>
+        ok
+          ? `<span class="text-emerald-400 font-bold">✓ 通過</span>`
+          : `<span class="text-rose-400 font-bold">✗ 攔截命中</span>`;
+
+      const compsRows = p.comparables
+        .map(
+          (c) => `
+          <tr class="border-b border-slate-800">
+            <td class="py-2 pr-2">${c.tx_date}</td>
+            <td class="py-2 pr-2">${c.community_or_address}</td>
+            <td class="py-2 pr-2">${c.floor_info}</td>
+            <td class="py-2 pr-2">${c.net_ping} 坪</td>
+            <td class="py-2 pr-2">${c.net_unit_price_wan} 萬/坪</td>
+            <td class="py-2 pr-2 font-bold text-emerald-300">${c.adjusted_unit_price_wan} 萬/坪</td>
+            <td class="py-2">${c.distance_m}m</td>
+          </tr>
+        `
+        )
+        .join("");
+
+      const brokerRows = p.broker_channels
+        .map(
+          (b, idx) => `
+          <tr class="border-b border-slate-800">
+            <td class="py-2 pr-2">${idx === 0 ? "🏆 最低價首選" : `管道 #${idx + 1}`}</td>
+            <td class="py-2 pr-2 font-medium text-white">${b.broker_agency} (${b.agent_name})</td>
+            <td class="py-2 pr-2 font-bold ${idx === 0 ? "text-emerald-400" : "text-slate-300"}">${b.asking_price_wan} 萬</td>
+            <td class="py-2">${b.listing_id}</td>
+          </tr>
+        `
+        )
+        .join("");
+
+      document.getElementById("modal-body").innerHTML = `
+        <!-- 購屋策略建議 -->
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 leading-relaxed">
+          <strong class="text-white block mb-1">💡 系統購屋與議價策略建議：</strong>
+          ${p.strategy_advice}
+        </div>
+
+        <!-- 四道排他風險掃描卡 & 車位拆算明細 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+            <h4 class="font-bold text-white text-sm mb-2">🛡️ 四道排他性風險體檢卡</h4>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">1. 法拍屋／點交債權處分檢查</span>
+              ${checkIcon(p.risk_result.pass_foreclosure)}
+            </div>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">2. 凶宅庫與房仲隱晦黑話雙重攔截</span>
+              ${checkIcon(p.risk_result.pass_haunted)}
+            </div>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">3. 北市地上權／工業宅／頂加灌水檢查</span>
+              ${checkIcon(p.risk_result.pass_property_type)}
+            </div>
+            <div class="flex justify-between py-1">
+              <span class="text-slate-400">4. 建管處海砂屋／輻射屋／危樓列管</span>
+              ${checkIcon(p.risk_result.pass_structural)}
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+            <h4 class="font-bold text-white text-sm mb-2">📐 車位拆算與實坪比結構分析</h4>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">車位拆算方式</span>
+              <span class="text-slate-200 font-medium">${p.parking_split_method}</span>
+            </div>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">未拆車位表面單價 vs 拆車位後淨單價</span>
+              <span class="text-emerald-300 font-bold">${p.raw_unit_price_wan} 萬/坪 → ${p.net_asking_unit_price_wan} 萬/坪</span>
+            </div>
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span class="text-slate-400">權狀總坪數 / 扣車位淨建物坪數</span>
+              <span class="text-slate-200">${p.total_ping} 坪 / ${p.net_building_ping} 坪</span>
+            </div>
+            <div class="flex justify-between py-1">
+              <span class="text-slate-400">室內實坪 (主+附) 與實坪比</span>
+              <span class="text-slate-200 font-bold">${p.indoor_ping} 坪 (實坪比 ${p.real_indoor_ratio_pct}% / 公設比 ${p.public_ratio_pct}%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 對標實價登錄明細表 -->
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-white text-sm">📑 對標實價登錄成交明細表 (${p.benchmark_tier})</h4>
+            <span class="text-slate-400">基準中位數：${p.benchmark_unit_price_wan} 萬/坪</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-400">
+                  <th class="py-2 pr-2">成交日期</th>
+                  <th class="py-2 pr-2">社區 / 去識別化門牌</th>
+                  <th class="py-2 pr-2">樓層</th>
+                  <th class="py-2 pr-2">淨建物坪數</th>
+                  <th class="py-2 pr-2">拆車位原單價</th>
+                  <th class="py-2 pr-2">樓層校正後單價</th>
+                  <th class="py-2">距離</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${compsRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 多房仲重複刊登歸戶比價表 -->
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+          <h4 class="font-bold text-white text-sm">🏢 全網房仲重複刊登歸戶比價 (${p.broker_channels.length} 家管道)</h4>
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-700 text-slate-400">
+                <th class="py-2 pr-2">排序</th>
+                <th class="py-2 pr-2">刊登仲介門市與經紀人</th>
+                <th class="py-2 pr-2">管道開價</th>
+                <th class="py-2">591 物件編號</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${brokerRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- LINE / Telegram 推播預覽 -->
+        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+          <h4 class="font-bold text-emerald-400 text-sm">📲 LINE / Telegram Bot 秒殺推播電報預覽</h4>
+          <pre class="whitespace-pre-wrap text-slate-300 font-mono text-[11px] leading-relaxed">${p.alert_preview}</pre>
+        </div>
+      `;
+
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeModal() {
+      const modal = document.getElementById("dd-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function openCustomEvalModal() {
+      const modal = document.getElementById("custom-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeCustomModal() {
+      const modal = document.getElementById("custom-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    async function runCustomEval() {
+      const totalPing = parseFloat(document.getElementById("c-ping").value) || 40;
+      const parkPing = parseFloat(document.getElementById("c-park-ping").value) || 0;
+      const netPing = Math.max(totalPing - parkPing, 10);
+
+      const payload = {
+        title: document.getElementById("c-title").value,
+        district: document.getElementById("c-district").value,
+        community_name: document.getElementById("c-community").value || null,
+        asking_price_wan: parseFloat(document.getElementById("c-price").value) || 3500,
+        total_ping: totalPing,
+        main_building_ping: +(netPing * 0.65).toFixed(2),
+        accessory_ping: +(netPing * 0.07).toFixed(2),
+        common_area_ping: +(netPing * 0.28).toFixed(2),
+        has_parking: parkPing > 0,
+        parking_type: "坡道平面",
+        parking_ping: parkPing,
+        parking_price_wan: parseFloat(document.getElementById("c-park-price").value) || 0,
+        description: document.getElementById("c-desc").value,
+      };
+
+      const resp = await fetch("/api/evaluate_custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const res = await resp.json();
+      const box = document.getElementById("custom-eval-result");
+      box.classList.remove("hidden");
+      box.innerHTML = `
+        <div class="p-3 rounded-lg bg-slate-900 border border-slate-700 space-y-1.5">
+          <div class="text-sm font-bold text-white">判定結果：${res.priority_label}</div>
+          <div>• 拆車位方式：${res.parking_split_method}</div>
+          <div>• 未拆車位表面單價：<b>${res.raw_unit_price_wan} 萬/坪</b> → 拆車位後真實淨單價 (P_ask)：<b class="text-emerald-300">${res.net_asking_unit_price_wan} 萬/坪</b></div>
+          <div>• 實價登錄基準價 (P_benchmark)：<b>${res.benchmark_unit_price_wan} 萬/坪</b> (${res.benchmark_tier})</div>
+          <div>• 實價折價率：<b class="text-rose-400 text-sm">${res.discount_rate_pct > 0 ? "+" : ""}${res.discount_rate_pct}%</b></div>
+          ${
+            res.risk_result.exclusion_reasons.length > 0
+              ? `<div class="text-rose-300 pt-1">⛔ 排他攔截原因：${res.risk_result.exclusion_reasons.join(" / ")}</div>`
+              : `<div class="text-emerald-300 pt-1">✓ 四道排他風控全數通過</div>`
+          }
+          <div class="text-slate-300 pt-1">💡 策略建議：${res.strategy_advice}</div>
+        </div>
+      `;
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      initMap();
+      loadProperties();
+    });
+  </script>
+</body>
+</html>
